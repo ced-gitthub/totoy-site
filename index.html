@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketplace CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- CONFIG BANNER (shown until Supabase is set up) -->
+  <div id="config-banner" class="config-banner hidden">
+    <i class="ti ti-alert-circle"></i>
+    Open <strong>config.js</strong> and add your Supabase URL + key to enable cloud sync.
+    <button onclick="dismissBanner()">Dismiss</button>
+  </div>
+
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo">
+        <i class="ti ti-shopping-bag"></i>
+        <span>Marketplace CRM</span>
+      </div>
+      <nav class="sidenav">
+        <button class="nav-item active" data-tab="dashboard"><i class="ti ti-layout-dashboard"></i> Dashboard</button>
+        <button class="nav-item" data-tab="listings"><i class="ti ti-tag"></i> Listings</button>
+        <button class="nav-item" data-tab="leads"><i class="ti ti-users"></i> Leads</button>
+        <button class="nav-item" data-tab="sellers"><i class="ti ti-building-store"></i> Sellers</button>
+      </nav>
+      <div class="sync-status" id="sync-status">
+        <i class="ti ti-cloud-off"></i> <span>Local only</span>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+
+      <!-- DASHBOARD -->
+      <section class="tab-section active" id="tab-dashboard">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+          <span class="page-subtitle" id="dashboard-date"></span>
+        </div>
+        <div class="metrics-grid" id="metrics-grid"></div>
+        <div class="charts-row">
+          <div class="chart-card">
+            <div class="chart-title">Lead funnel</div>
+            <div class="chart-wrap"><canvas id="funnelChart" role="img" aria-label="Lead funnel bar chart">Funnel data</canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Revenue — last 6 months</div>
+            <div class="chart-wrap"><canvas id="revenueChart" role="img" aria-label="Revenue trend line chart">Revenue data</canvas></div>
+          </div>
+        </div>
+        <div class="recent-card">
+          <div class="chart-title">Recent leads</div>
+          <div id="recent-leads"></div>
+        </div>
+      </section>
+
+      <!-- LISTINGS -->
+      <section class="tab-section" id="tab-listings">
+        <div class="page-header">
+          <h1>Listings</h1>
+          <button class="btn-primary" onclick="openModal('listing-modal')"><i class="ti ti-plus"></i> Add listing</button>
+        </div>
+        <div class="filter-row">
+          <input type="text" id="listing-search" placeholder="Search listings…" oninput="renderListings()" />
+          <select id="listing-filter" onchange="renderListings()">
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="sold">Sold</option>
+            <option value="paused">Paused</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Item</th><th>Buy price</th><th>Ask price</th><th>Margin</th><th>Source</th><th>Status</th><th></th></tr></thead>
+            <tbody id="listings-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- LEADS -->
+      <section class="tab-section" id="tab-leads">
+        <div class="page-header">
+          <h1>Leads</h1>
+          <button class="btn-primary" onclick="openModal('lead-modal')"><i class="ti ti-plus"></i> Log lead</button>
+        </div>
+        <div class="filter-row">
+          <input type="text" id="lead-search" placeholder="Search leads…" oninput="renderLeads()" />
+          <select id="lead-filter" onchange="renderLeads()">
+            <option value="all">All stages</option>
+            <option value="new">New</option>
+            <option value="negotiating">Negotiating</option>
+            <option value="closed">Closed</option>
+            <option value="lost">Lost</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Buyer</th><th>Item</th><th>Stage</th><th>Final price</th><th>Notes</th><th></th></tr></thead>
+            <tbody id="leads-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SELLERS -->
+      <section class="tab-section" id="tab-sellers">
+        <div class="page-header">
+          <h1>Sellers</h1>
+          <button class="btn-primary" onclick="openModal('seller-modal')"><i class="ti ti-plus"></i> Add seller</button>
+        </div>
+        <div class="sellers-grid" id="sellers-grid"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: Add Listing -->
+  <div class="modal-overlay hidden" id="listing-modal">
+    <div class="modal">
+      <div class="modal-header"><h2>Add listing</h2><button onclick="closeModal('listing-modal')" class="modal-close"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body">
+        <label>Item name <input type="text" id="l-name" placeholder="e.g. iPhone 14 Pro" /></label>
+        <div class="form-row">
+          <label>Buy price ($) <input type="number" id="l-buy" placeholder="0.00" /></label>
+          <label>Ask price ($) <input type="number" id="l-ask" placeholder="0.00" /></label>
+        </div>
+        <label>Status
+          <select id="l-status">
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+            <option value="sold">Sold</option>
+          </select>
+        </label>
+        <label>Source seller <input type="text" id="l-source" placeholder="Where did you buy it from?" /></label>
+        <label>Notes <textarea id="l-notes" rows="2" placeholder="Condition, details…"></textarea></label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('listing-modal')">Cancel</button>
+        <button class="btn-primary" onclick="saveListing()">Save listing</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Log Lead -->
+  <div class="modal-overlay hidden" id="lead-modal">
+    <div class="modal">
+      <div class="modal-header"><h2>Log a lead</h2><button onclick="closeModal('lead-modal')" class="modal-close"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>Buyer name / handle <input type="text" id="ld-name" placeholder="FB name or @handle" /></label>
+          <label>Item they asked about <input type="text" id="ld-item" placeholder="e.g. iPhone 14 Pro" /></label>
+        </div>
+        <label>Stage
+          <select id="ld-status">
+            <option value="new">New inquiry</option>
+            <option value="negotiating">Negotiating</option>
+            <option value="closed">Closed (won)</option>
+            <option value="lost">Lost</option>
+          </select>
+        </label>
+        <label>Final price ($) — if closed <input type="number" id="ld-price" placeholder="0.00" /></label>
+        <label>Notes <textarea id="ld-notes" rows="2" placeholder="What did they say? Any context…"></textarea></label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('lead-modal')">Cancel</button>
+        <button class="btn-primary" onclick="saveLead()">Save lead</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Add Seller -->
+  <div class="modal-overlay hidden" id="seller-modal">
+    <div class="modal">
+      <div class="modal-header"><h2>Add seller</h2><button onclick="closeModal('seller-modal')" class="modal-close"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>Seller name <input type="text" id="s-name" placeholder="Name or FB profile" /></label>
+          <label>Rating
+            <select id="s-rating">
+              <option value="5">★★★★★ Excellent</option>
+              <option value="4">★★★★☆ Good</option>
+              <option value="3">★★★☆☆ Average</option>
+              <option value="2">★★☆☆☆ Poor</option>
+              <option value="1">★☆☆☆☆ Avoid</option>
+            </select>
+          </label>
+        </div>
+        <label>Specializes in <input type="text" id="s-specialty" placeholder="e.g. electronics, furniture, clothing" /></label>
+        <label>Contact / link <input type="text" id="s-contact" placeholder="FB link or phone" /></label>
+        <label>Notes <textarea id="s-notes" rows="2" placeholder="Reliability, pricing notes…"></textarea></label>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal('seller-modal')">Cancel</button>
+        <button class="btn-primary" onclick="saveSeller()">Save seller</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
