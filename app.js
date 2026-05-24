@@ -1,5 +1,5 @@
 // ============================================================
-//  MARKPLACE CRM — Upgraded app.js (Auth + Status Modifiers)
+//  MARKETPLACE CRM — Upgraded app.js (Simple Pass + Actions)
 // ============================================================
 
 let db = null;
@@ -12,31 +12,31 @@ let sellers = [];
 let funnelChart = null;
 let revenueChart = null;
 
-// ── Init & Security ─────────────────────────────────────────
+// 🔒 CHOOSE YOUR PASSWORD HERE:
+const APP_PASSWORD = 'TotoyMarketplace2026';
+
+// ── Init ───────────────────────────────────────────────────
 async function init() {
+  // Check if they already unlocked it during this browser session
+  if (sessionStorage.getItem('crm_unlocked') === 'true') {
+    hideLoginScreen();
+  } else {
+    showLoginScreen();
+  }
+
   if (typeof SUPABASE_URL === 'string' && SUPABASE_URL.length > 0) {
     try {
       db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
       useCloud = true;
       setSyncStatus(true);
-      
-      // Check current login session status
-      const { data: { session } } = await db.auth.getSession();
-      if (session) {
-        hideLoginScreen();
-        await loadAll();
-      } else {
-        showLoginScreen();
-      }
     } catch (e) {
       console.warn('Supabase init failed, falling back to local storage', e);
-      hideLoginScreen(); // Local storage falls back safely
     }
   } else {
     document.getElementById('config-banner').classList.remove('hidden');
-    hideLoginScreen();
   }
 
+  await loadAll();
   renderDashboard();
   renderListings();
   renderLeads();
@@ -45,7 +45,7 @@ async function init() {
   setupNavigation();
 }
 
-// ── Authentication Handlers ────────────────────────────────
+// ── Simple Password Security ────────────────────────────────
 function showLoginScreen() {
   document.getElementById('login-overlay').style.display = 'flex';
 }
@@ -55,30 +55,19 @@ function hideLoginScreen() {
   if (overlay) overlay.style.display = 'none';
 }
 
-async function handleLogin(e) {
+function handleSimpleLogin(e) {
   e.preventDefault();
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
+  const inputPass = document.getElementById('crm-password').value;
+  const errorMsg = document.getElementById('login-error');
 
-  if (useCloud) {
-    const { error } = await db.auth.signInWithPassword({ email, password });
-    if (error) {
-      alert('Login Failed: ' + error.message);
-    } else {
-      hideLoginScreen();
-      await loadAll();
-      refreshAllViews();
-    }
-  } else {
+  if (inputPass === APP_PASSWORD) {
+    sessionStorage.setItem('crm_unlocked', 'true'); // Keeps them logged in until they close tab
+    errorMsg.style.display = 'none';
     hideLoginScreen();
+  } else {
+    errorMsg.style.display = 'block';
+    document.getElementById('crm-password').value = '';
   }
-}
-
-function refreshAllViews() {
-  renderDashboard();
-  renderListings();
-  renderLeads();
-  renderSellers();
 }
 
 function setDate() {
@@ -150,7 +139,7 @@ document.addEventListener('click', e => {
   }
 });
 
-// ── Listings Upgraded Actions ──────────────────────────────
+// ── Listings + Actions ─────────────────────────────────────
 async function saveListing() {
   const name   = document.getElementById('l-name').value.trim();
   const buy    = parseFloat(document.getElementById('l-buy').value)  || 0;
@@ -209,7 +198,7 @@ function renderListings() {
       <td class="${marginClass}">${margin !== '—' ? margin + '%' : '—'}</td>
       <td style="color: var(--text-2)">${esc(l.source_seller || '—')}</td>
       <td>
-        <select onchange="updateListingStatus('${l.id}', this.value)" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; background: #f4f4f3; border: 1px solid #e5e5e0;">
+        <select onchange="updateListingStatus('${l.id}', this.value)" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; background: #f4f4f3; border: 1px solid #e5e5e0; cursor: pointer;">
           <option value="active" ${l.status === 'active' ? 'selected' : ''}>Active</option>
           <option value="sold" ${l.status === 'sold' ? 'selected' : ''}>Sold</option>
           <option value="delisted" ${l.status === 'delisted' ? 'selected' : ''}>Delisted</option>
@@ -243,7 +232,7 @@ async function deleteListing(id) {
   renderDashboard();
 }
 
-// ── Leads Upgraded Actions ─────────────────────────────────
+// ── Leads + Actions ────────────────────────────────────────
 async function saveLead() {
   const name   = document.getElementById('ld-name').value.trim();
   const item   = document.getElementById('ld-item').value.trim();
@@ -292,7 +281,7 @@ function renderLeads() {
     <td class="cell-name">${esc(l.buyer_name)}</td>
     <td style="color: var(--text-2)">${esc(l.item_name || '—')}</td>
     <td>
-      <select onchange="updateLeadStage('${l.id}', this.value)" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; background: #f4f4f3; border: 1px solid #e5e5e0;">
+      <select onchange="updateLeadStage('${l.id}', this.value)" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; background: #f4f4f3; border: 1px solid #e5e5e0; cursor: pointer;">
         <option value="new" ${l.status === 'new' ? 'selected' : ''}>New</option>
         <option value="negotiating" ${l.status === 'negotiating' ? 'selected' : ''}>Negotiating</option>
         <option value="closed" ${l.status === 'closed' ? 'selected' : ''}>Closed</option>
