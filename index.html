@@ -1,501 +1,339 @@
-// ============================================================
-//  MARKETPLACE CRM — Upgraded app.js (Simple Pass + Actions + PHP ₱)
-// ============================================================
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Totoy's Marketplace CRM</title>
+  
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
 
-let db = null;
-let useCloud = false;
+  <div id="login-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fdfdfc; display: flex; align-items: center; justify-content: center; z-index: 9999;">
+    <div style="width: 100%; max-width: 340px; padding: 2.5rem 2rem; background: #fff; border: 1px solid #e5e5e0; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.04); text-align: center;">
+      <div style="font-size: 32px; margin-bottom: 0.5rem;">🔒</div>
+      <h2 style="font-family: serif; font-size: 24px; margin-bottom: 6px; color: #1a1a18;">Totoy's CRM</h2>
+      <p style="color: #666; font-size: 13px; margin-bottom: 1.5rem;">Enter password to unlock dashboard</p>
+      
+      <form id="login-form" onsubmit="handleSimpleLogin(event)">
+        <div style="margin-bottom: 1.25rem;">
+          <input type="password" id="crm-password" placeholder="Password" required style="width: 100%; padding: 10px 12px; border: 1px solid #e5e5e0; border-radius: 6px; font-size: 14px; text-align: center; background: #fdfdfc;">
+        </div>
+        <button type="submit" style="width: 100%; padding: 10px; background: #1a1a18; color: #fff; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 14px;">Unlock App</button>
+      </form>
+      <p id="login-error" style="color: #de350b; font-size: 12px; margin-top: 10px; display: none;">Incorrect password. Try again.</p>
+    </div>
+  </div>
 
-let listings = [];
-let leads = [];
-let sellers = [];
+  <div id="config-banner" class="banner hidden">
+    <div class="banner-content">
+      <i class="ti ti-alert-triangle"></i>
+      <span>Using <strong>Local Mode</strong>. Set your Supabase keys in <code>config.js</code> to enable multi-device sync.</span>
+    </div>
+    <button onclick="dismissBanner()" class="banner-close">&times;</button>
+  </div>
 
-let funnelChart = null;
-let revenueChart = null;
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1 class="logo-text">Totoy CRM</h1>
+        <div id="sync-status" class="sync-badge">
+          <i class="ti ti-cloud-off"></i> <span>Checking...</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-tab="dashboard">
+          <i class="ti ti-layout-dashboard"></i> <span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-tab="listings">
+          <i class="ti ti-extended-reality"></i> <span>Inventory</span>
+        </button>
+        <button class="nav-item" data-tab="leads">
+          <i class="ti ti-users-group"></i> <span>Leads</span>
+        </button>
+        <button class="nav-item" data-tab="sellers">
+          <i class="ti ti-building-store"></i> <span>Sellers</span>
+        </button>
+      </nav>
+    </aside>
 
-// 🔒 CHOOSE YOUR PASSWORD HERE:
-const APP_PASSWORD = 'TotoyMarketplace2026';
-
-// ── Init ───────────────────────────────────────────────────
-async function init() {
-  // Check if they already unlocked it during this browser session
-  if (sessionStorage.getItem('crm_unlocked') === 'true') {
-    hideLoginScreen();
-  } else {
-    showLoginScreen();
-  }
-
-  if (typeof SUPABASE_URL === 'string' && SUPABASE_URL.length > 0) {
-    try {
-      db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-      useCloud = true;
-      setSyncStatus(true);
-    } catch (e) {
-      console.warn('Supabase init failed, falling back to local storage', e);
-    }
-  } else {
-    document.getElementById('config-banner').classList.remove('hidden');
-  }
-
-  await loadAll();
-  renderDashboard();
-  renderListings();
-  renderLeads();
-  renderSellers();
-  setDate();
-  setupNavigation();
-}
-
-// ── Simple Password Security ────────────────────────────────
-function showLoginScreen() {
-  document.getElementById('login-overlay').style.display = 'flex';
-}
-
-function hideLoginScreen() {
-  const overlay = document.getElementById('login-overlay');
-  if (overlay) overlay.style.display = 'none';
-}
-
-function handleSimpleLogin(e) {
-  e.preventDefault();
-  const inputPass = document.getElementById('crm-password').value;
-  const errorMsg = document.getElementById('login-error');
-
-  if (inputPass === APP_PASSWORD) {
-    sessionStorage.setItem('crm_unlocked', 'true'); // Keeps them logged in until they close tab
-    errorMsg.style.display = 'none';
-    hideLoginScreen();
-  } else {
-    errorMsg.style.display = 'block';
-    document.getElementById('crm-password').value = '';
-  }
-}
-
-function setDate() {
-  const el = document.getElementById('dashboard-date');
-  if (el) el.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-}
-
-function setSyncStatus(synced) {
-  const el = document.getElementById('sync-status');
-  if (el) {
-    if (synced) {
-      el.innerHTML = '<i class="ti ti-cloud-check"></i> <span>Synced</span>';
-      el.classList.add('synced');
-    } else {
-      el.innerHTML = '<i class="ti ti-cloud-off"></i> <span>Local only</span>';
-      el.classList.remove('synced');
-    }
-  }
-}
-
-function dismissBanner() {
-  document.getElementById('config-banner').classList.add('hidden');
-}
-
-// ── Navigation ─────────────────────────────────────────────
-function setupNavigation() {
-  document.querySelectorAll('.nav-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab;
-      document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
-      document.getElementById('tab-' + tab).classList.add('active');
-      if (tab === 'dashboard') renderDashboard();
-    });
-  });
-}
-
-// ── Data loading ───────────────────────────────────────────
-async function loadAll() {
-  if (useCloud) {
-    const [l, ld, s] = await Promise.all([
-      db.from('listings').select('*').order('created_at', { ascending: false }),
-      db.from('leads').select('*').order('created_at', { ascending: false }),
-      db.from('sellers').select('*').order('created_at', { ascending: false }),
-    ]);
-    listings = l.data || [];
-    leads = ld.data || [];
-    sellers = s.data || [];
-  } else {
-    listings = JSON.parse(localStorage.getItem('mp_listings') || '[]');
-    leads    = JSON.parse(localStorage.getItem('mp_leads')    || '[]');
-    sellers  = JSON.parse(localStorage.getItem('mp_sellers')  || '[]');
-  }
-}
-
-function saveLocal() {
-  localStorage.setItem('mp_listings', JSON.stringify(listings));
-  localStorage.setItem('mp_leads',    JSON.stringify(leads));
-  localStorage.setItem('mp_sellers',  JSON.stringify(sellers));
-}
-
-// ── Modals ─────────────────────────────────────────────────
-function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-document.addEventListener('click', e => {
-  if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.add('hidden');
-  }
-});
-
-// ── Listings + PHP ₱ Actions ───────────────────────────────
-async function saveListing() {
-  const name   = document.getElementById('l-name').value.trim();
-  const buy    = parseFloat(document.getElementById('l-buy').value)  || 0;
-  const ask    = parseFloat(document.getElementById('l-ask').value)  || 0;
-  const status = document.getElementById('l-status').value;
-  const source = document.getElementById('l-source').value.trim();
-  const notes  = document.getElementById('l-notes').value.trim();
-  if (!name) return alert('Please enter an item name.');
-
-  const record = { name, buy_price: buy, ask_price: ask, status, source_seller: source, notes };
-
-  if (useCloud) {
-    const { data, error } = await db.from('listings').insert([record]).select();
-    if (error) return alert('Error saving: ' + error.message);
-    listings.unshift(data[0]);
-  } else {
-    record.id = Date.now();
-    record.created_at = new Date().toISOString();
-    listings.unshift(record);
-    saveLocal();
-  }
-
-  closeModal('listing-modal');
-  clearForm(['l-name','l-buy','l-ask','l-source','l-notes']);
-  document.getElementById('l-status').value = 'active';
-  renderListings();
-  renderDashboard();
-}
-
-function renderListings() {
-  const search = (document.getElementById('listing-search')?.value || '').toLowerCase();
-  const filter = document.getElementById('listing-filter')?.value || 'all';
-  const tbody = document.getElementById('listings-tbody');
-
-  let filtered = listings.filter(l => {
-    const matchSearch = !search || l.name?.toLowerCase().includes(search) || l.source_seller?.toLowerCase().includes(search);
-    const matchFilter = filter === 'all' || l.status === filter;
-    return matchSearch && matchFilter;
-  });
-
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty-state">No listings yet — add one to get started.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = filtered.map(l => {
-    const buy = l.buy_price || 0;
-    const ask = l.ask_price || 0;
-    const margin = buy > 0 ? ((ask - buy) / buy * 100).toFixed(1) : '—';
-    const marginClass = parseFloat(margin) >= 0 ? 'margin-pos' : 'margin-neg';
-    
-    return `<tr>
-      <td><div class="cell-name">${esc(l.name)}</div>${l.notes ? `<div class="cell-sub">${esc(l.notes)}</div>` : ''}</td>
-      <td class="price-cell">₱${buy.toFixed(2)}</td>
-      <td class="price-cell">₱${ask.toFixed(2)}</td>
-      <td class="${marginClass}">${margin !== '—' ? margin + '%' : '—'}</td>
-      <td style="color: var(--text-2)">${esc(l.source_seller || '—')}</td>
-      <td>
-        <select onchange="updateListingStatus('${l.id}', this.value)" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; background: #f4f4f3; border: 1px solid #e5e5e0; cursor: pointer;">
-          <option value="active" ${l.status === 'active' ? 'selected' : ''}>Active</option>
-          <option value="sold" ${l.status === 'sold' ? 'selected' : ''}>Sold</option>
-          <option value="delisted" ${l.status === 'delisted' ? 'selected' : ''}>Delisted</option>
-        </select>
-      </td>
-      <td>
-        <button class="btn-icon" onclick="deleteListing('${l.id}')" aria-label="delete"><i class="ti ti-trash"></i></button>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-async function updateListingStatus(id, newStatus) {
-  if (useCloud) {
-    await db.from('listings').update({ status: newStatus }).eq('id', id);
-  }
-  const index = listings.findIndex(l => String(l.id) === String(id));
-  if (index !== -1) listings[index].status = newStatus;
-  saveLocal();
-  renderDashboard();
-}
-
-async function deleteListing(id) {
-  if (!confirm('Delete this listing?')) return;
-  if (useCloud) {
-    await db.from('listings').delete().eq('id', id);
-  }
-  listings = listings.filter(l => String(l.id) !== String(id));
-  saveLocal();
-  renderListings();
-  renderDashboard();
-}
-
-// ── Leads + PHP ₱ Actions ──────────────────────────────────
-async function saveLead() {
-  const name   = document.getElementById('ld-name').value.trim();
-  const item   = document.getElementById('ld-item').value.trim();
-  const status = document.getElementById('ld-status').value;
-  const price  = parseFloat(document.getElementById('ld-price').value) || 0;
-  const notes  = document.getElementById('ld-notes').value.trim();
-  if (!name) return alert('Please enter a buyer name.');
-
-  const record = { buyer_name: name, item_name: item, status, final_price: price, notes };
-
-  if (useCloud) {
-    const { data, error } = await db.from('leads').insert([record]).select();
-    if (error) return alert('Error saving: ' + error.message);
-    leads.unshift(data[0]);
-  } else {
-    record.id = Date.now();
-    record.created_at = new Date().toISOString();
-    leads.unshift(record);
-    saveLocal();
-  }
-
-  closeModal('lead-modal');
-  clearForm(['ld-name','ld-item','ld-price','ld-notes']);
-  document.getElementById('ld-status').value = 'new';
-  renderLeads();
-  renderDashboard();
-}
-
-function renderLeads() {
-  const search = (document.getElementById('lead-search')?.value || '').toLowerCase();
-  const filter = document.getElementById('lead-filter')?.value || 'all';
-  const tbody = document.getElementById('leads-tbody');
-
-  let filtered = leads.filter(l => {
-    const matchSearch = !search || l.buyer_name?.toLowerCase().includes(search) || l.item_name?.toLowerCase().includes(search);
-    const matchFilter = filter === 'all' || l.status === filter;
-    return matchSearch && matchFilter;
-  });
-
-  if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No leads yet — log one to start tracking.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = filtered.map(l => `<tr>
-    <td class="cell-name">${esc(l.buyer_name)}</td>
-    <td style="color: var(--text-2)">${esc(l.item_name || '—')}</td>
-    <td>
-      <select onchange="updateLeadStage('${l.id}', this.value)" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; background: #f4f4f3; border: 1px solid #e5e5e0; cursor: pointer;">
-        <option value="new" ${l.status === 'new' ? 'selected' : ''}>New</option>
-        <option value="negotiating" ${l.status === 'negotiating' ? 'selected' : ''}>Negotiating</option>
-        <option value="closed" ${l.status === 'closed' ? 'selected' : ''}>Closed</option>
-        <option value="lost" ${l.status === 'lost' ? 'selected' : ''}>Lost</option>
-      </select>
-    </td>
-    <td>
-      <span style="font-size: 13px; color: var(--text-2); margin-right: 2px;">₱</span><input type="number" value="${l.final_price || ''}" placeholder="—" onchange="updateLeadPrice('${l.id}', this.value)" style="width: 80px; padding: 4px; border: 1px solid #e5e5e0; border-radius: 4px; text-align: right; font-size: 13px;">
-    </td>
-    <td style="color: var(--text-2); font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(l.notes || '—')}</td>
-    <td><button class="btn-icon" onclick="deleteLead('${l.id}')" aria-label="delete"><i class="ti ti-trash"></i></button></td>
-  </tr>`).join('');
-}
-
-async function updateLeadStage(id, newStatus) {
-  if (useCloud) {
-    await db.from('leads').update({ status: newStatus }).eq('id', id);
-  }
-  const index = leads.findIndex(l => String(l.id) === String(id));
-  if (index !== -1) leads[index].status = newStatus;
-  saveLocal();
-  renderDashboard();
-}
-
-async function updateLeadPrice(id, newPrice) {
-  const parsedPrice = parseFloat(newPrice) || 0;
-  if (useCloud) {
-    await db.from('leads').update({ final_price: parsedPrice }).eq('id', id);
-  }
-  const index = leads.findIndex(l => String(l.id) === String(id));
-  if (index !== -1) leads[index].final_price = parsedPrice;
-  saveLocal();
-  renderDashboard();
-}
-
-async function deleteLead(id) {
-  if (!confirm('Delete this lead?')) return;
-  if (useCloud) await db.from('leads').delete().eq('id', id);
-  leads = leads.filter(l => String(l.id) !== String(id));
-  saveLocal();
-  renderLeads();
-  renderDashboard();
-}
-
-// ── Sellers ────────────────────────────────────────────────
-async function saveSeller() {
-  const name      = document.getElementById('s-name').value.trim();
-  const rating    = parseInt(document.getElementById('s-rating').value);
-  const specialty = document.getElementById('s-specialty').value.trim();
-  const contact   = document.getElementById('s-contact').value.trim();
-  const notes     = document.getElementById('s-notes').value.trim();
-  if (!name) return alert('Please enter a seller name.');
-
-  const record = { name, rating, specialty, contact, notes };
-
-  if (useCloud) {
-    const { data, error } = await db.from('sellers').insert([record]).select();
-    if (error) return alert('Error saving: ' + error.message);
-    sellers.unshift(data[0]);
-  } else {
-    record.id = Date.now();
-    record.created_at = new Date().toISOString();
-    sellers.unshift(record);
-    saveLocal();
-  }
-
-  closeModal('seller-modal');
-  clearForm(['s-name','s-specialty','s-contact','s-notes']);
-  document.getElementById('s-rating').value = '5';
-  renderSellers();
-}
-
-function renderSellers() {
-  const grid = document.getElementById('sellers-grid');
-  if (!sellers.length) {
-    grid.innerHTML = '<div class="empty-sellers">No sellers tracked yet. Add your first source.</div>';
-    return;
-  }
-  grid.innerHTML = sellers.map(s => {
-    const initials = s.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
-    const stars = '★'.repeat(s.rating || 5) + '☆'.repeat(5 - (s.rating || 5));
-    return `<div class="seller-card">
-      <div class="seller-top">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div class="seller-avatar">${initials}</div>
+    <main class="main-content">
+      
+      <section id="tab-dashboard" class="tab-section active">
+        <header class="section-header">
           <div>
-            <div class="seller-name">${esc(s.name)}</div>
-            <div class="seller-specialty">${esc(s.specialty || 'General')}</div>
+            <h2>Overview</h2>
+            <p id="dashboard-date" class="subtitle"></p>
+          </div>
+        </header>
+
+        <div id="metrics-grid" class="metrics-grid"></div>
+
+        <div class="charts-row">
+          <div class="chart-card">
+            <h3>Sales Funnel Conversion</h3>
+            <div class="chart-container">
+              <canvas id="funnelChart"></canvas>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h3>Revenue Growth Trajectory</h3>
+            <div class="chart-container">
+              <canvas id="revenueChart"></canvas>
+            </div>
           </div>
         </div>
-        <button class="btn-icon" onclick="deleteSeller('${s.id}')" aria-label="delete"><i class="ti ti-trash"></i></button>
+
+        <div class="dashboard-secondary-row">
+          <div class="data-card full-width">
+            <h3>Recent Updates Log</h3>
+            <div id="recent-leads" class="recent-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-listings" class="tab-section">
+        <header class="section-header">
+          <div>
+            <h2>Inventory Management</h2>
+            <p class="subtitle">Track active assets, base buy costs, and live market margins.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('listing-modal')">
+            <i class="ti ti-plus"></i> New Listing
+          </button>
+        </header>
+
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="ti ti-search"></i>
+            <input type="text" id="listing-search" placeholder="Search items or sources..." oninput="renderListings()">
+          </div>
+          <select id="listing-filter" onchange="renderListings()" class="select-filter">
+            <option value="all">All Inventory</option>
+            <option value="active">Active Only</option>
+            <option value="sold">Sold</option>
+            <option value="delisted">Delisted</option>
+          </select>
+        </div>
+
+        <div class="data-card table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Item Details</th>
+                <th class="price-cell">Buy Price</th>
+                <th class="price-cell">Ask Price</th>
+                <th>Proj. Margin</th>
+                <th>Source/Seller</th>
+                <th>Status</th>
+                <th style="width:50px"></th>
+              </tr>
+            </thead>
+            <tbody id="listings-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-leads" class="tab-section">
+        <header class="section-header">
+          <div>
+            <h2>Deal Pipeline</h2>
+            <p class="subtitle">Track buyer inquiries, custom pricing counter-offers, and deal closures.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('lead-modal')">
+            <i class="ti ti-plus"></i> Log Lead
+          </button>
+        </header>
+
+        <div class="table-actions">
+          <div class="search-box">
+            <i class="ti ti-search"></i>
+            <input type="text" id="lead-search" placeholder="Search buyers or items..." oninput="renderLeads()">
+          </div>
+          <select id="lead-filter" onchange="renderLeads()" class="select-filter">
+            <option value="all">All Stages</option>
+            <option value="new">New Inquiry</option>
+            <option value="negotiating">Negotiating</option>
+            <option value="closed">Closed / Won</option>
+            <option value="lost">Lost</option>
+          </select>
+        </div>
+
+        <div class="data-card table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Buyer Name</th>
+                <th>Target Item</th>
+                <th>Pipeline Stage</th>
+                <th class="price-cell">Final Price</th>
+                <th>Notes Summary</th>
+                <th style="width:50px"></th>
+              </tr>
+            </thead>
+            <tbody id="leads-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-sellers" class="tab-section">
+        <header class="section-header">
+          <div>
+            <h2>Supplier Network</h2>
+            <p class="subtitle">Directory of trusted sources, product specialties, and ratings.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('seller-modal')">
+            <i class="ti ti-plus"></i> Add Supplier
+          </button>
+        </header>
+        <div id="sellers-grid" class="sellers-grid"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="listing-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Create New Listing</h3>
+        <button onclick="closeModal('listing-modal')" class="btn-close">&times;</button>
       </div>
-      <div class="seller-stars">${stars}</div>
-      ${s.contact ? `<div class="seller-contact"><i class="ti ti-link" style="font-size:12px"></i> ${esc(s.contact)}</div>` : ''}
-      ${s.notes ? `<div class="seller-notes">${esc(s.notes)}</div>` : ''}
-    </div>`;
-  }).join('');
-}
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Item Name *</label>
+          <input type="text" id="l-name" placeholder="e.g., iPhone 13 Pro Max">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Buy Price (₱)</label>
+            <input type="number" id="l-buy" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label>Asking Price (₱)</label>
+            <input type="number" id="l-ask" placeholder="0.00">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Listing Status</label>
+            <select id="l-status">
+              <option value="active">Active / Available</option>
+              <option value="sold">Sold Out</option>
+              <option value="delisted">Delisted</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Source / Supplier</label>
+            <input type="text" id="l-source" placeholder="Who sold it to you?">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Item Notes</label>
+          <textarea id="l-notes" rows="3" placeholder="Condition details, issues, configuration specs..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('listing-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveListing()">Save Asset</button>
+      </div>
+    </div>
+  </div>
 
-async function deleteSeller(id) {
-  if (!confirm('Delete this seller?')) return;
-  if (useCloud) await db.from('sellers').delete().eq('id', id);
-  sellers = sellers.filter(s => String(s.id) !== String(id));
-  saveLocal();
-  renderSellers();
-}
+  <div id="lead-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Log Customer Inquiry</h3>
+        <button onclick="closeModal('lead-modal')" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Buyer Contact Name *</label>
+          <input type="text" id="ld-name" placeholder="e.g., Juan Dela Cruz">
+        </div>
+        <div class="form-group">
+          <label>Target Item interested in</label>
+          <input type="text" id="ld-item" placeholder="e.g., iPhone 13 Pro Max">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Pipeline Stage</label>
+            <select id="ld-status">
+              <option value="new">New Inquiry / Lead</option>
+              <option value="negotiating">Negotiation in Progress</option>
+              <option value="closed">Closed / Deal Won</option>
+              <option value="lost">Lost Inquiry</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Agreed Final Price (₱)</label>
+            <input type="number" id="ld-price" placeholder="Leave blank if negotiating">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Conversation Notes</label>
+          <textarea id="ld-notes" rows="3" placeholder="Offers made, meet-up preferences, delivery requests..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('lead-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveLead()">Log Lead</button>
+      </div>
+    </div>
+  </div>
 
-// ── Dashboard + Metrics Realignment ────────────────────────
-function renderDashboard() {
-  const total   = leads.length;
-  const closed  = leads.filter(l => l.status === 'closed').length;
-  const negot   = leads.filter(l => l.status === 'negotiating').length;
-  const lost    = leads.filter(l => l.status === 'lost').length;
-  const rate    = total > 0 ? Math.round((closed / total) * 100) : 0;
-  const revenue = leads.filter(l => l.status === 'closed').reduce((s, l) => s + (l.final_price || 0), 0);
-  const profit  = listings.reduce((s, l) => s + ((l.ask_price || 0) - (l.buy_price || 0)), 0);
-  const active  = listings.filter(l => l.status === 'active').length;
+  <div id="seller-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>Add Supplier Profile</h3>
+        <button onclick="closeModal('seller-modal')" class="btn-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Supplier Name *</label>
+          <input type="text" id="s-name" placeholder="e.g., Gadget Wholesaler PH">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Trust Rating</label>
+            <select id="s-rating">
+              <option value="5">⭐⭐⭐⭐⭐ 5 Stars</option>
+              <option value="4">⭐⭐⭐⭐ 4 Stars</option>
+              <option value="3">⭐⭐⭐ 3 Stars</option>
+              <option value="2">⭐⭐ 2 Stars</option>
+              <option value="1">⭐ 1 Star</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Product Specialty</label>
+            <input type="text" id="s-specialty" placeholder="e.g., Apple Products, Defects, etc.">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Contact Link / Social Handles</label>
+          <input type="text" id="s-contact" placeholder="fb.com/username or phone number">
+        </div>
+        <div class="form-group">
+          <label>Private Background Notes</label>
+          <textarea id="s-notes" rows="3" placeholder="Supplier pricing patterns, refund speeds, reliability details..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('seller-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSeller()">Save Supplier</button>
+      </div>
+    </div>
+  </div>
 
-  const metricsGrid = document.getElementById('metrics-grid');
-  if (metricsGrid) {
-    metricsGrid.innerHTML = `
-      <div class="metric"><div class="metric-label">Total leads</div><div class="metric-value">${total}</div><div class="metric-sub">all time</div></div>
-      <div class="metric"><div class="metric-label">Closed deals</div><div class="metric-value">${closed}</div><div class="metric-sub">won</div></div>
-      <div class="metric"><div class="metric-label">Close rate</div><div class="metric-value">${rate}%</div><div class="metric-sub">inquiries → sales</div></div>
-      <div class="metric"><div class="metric-label">Revenue</div><div class="metric-value">₱${Math.round(revenue).toLocaleString()}</div><div class="metric-sub">from closed deals</div></div>
-      <div class="metric"><div class="metric-label">Active listings</div><div class="metric-value">${active}</div><div class="metric-sub">live now</div></div>
-      <div class="metric"><div class="metric-label">Potential profit</div><div class="metric-value">₱${Math.round(profit).toLocaleString()}</div><div class="metric-sub">ask − buy</div></div>
-    `;
-  }
-
-  // Funnel chart
-  const funnelEl = document.getElementById('funnelChart');
-  if (funnelEl) {
-    if (funnelChart) funnelChart.destroy();
-    funnelChart = new Chart(funnelEl, {
-      type: 'bar',
-      data: {
-        labels: ['All inquiries', 'Negotiating', 'Closed', 'Lost'],
-        datasets: [{
-          data: [total, negot, closed, lost],
-          backgroundColor: ['#B5D4F4', '#FAC775', '#C0DD97', '#F7C1C1'],
-          borderRadius: 5,
-          borderSkipped: false,
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0, stepSize: 1 } }, x: { grid: { display: false } } }
-      }
-    });
-  }
-
-  // Revenue chart (PHP ₱ axis scaling)
-  const revenueEl = document.getElementById('revenueChart');
-  if (revenueEl) {
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const now = new Date();
-    const revByMonth = Array(6).fill(0);
-    leads.filter(l => l.status === 'closed' && l.final_price > 0).forEach(l => {
-      const d = new Date(l.created_at);
-      const diff = (now.getFullYear() * 12 + now.getMonth()) - (d.getFullYear() * 12 + d.getMonth());
-      if (diff >= 0 && diff < 6) revByMonth[5 - diff] += l.final_price;
-    });
-    const revLabels = Array.from({ length: 6 }, (_, i) => months[(now.getMonth() - 5 + i + 12) % 12]);
-
-    if (revenueChart) revenueChart.destroy();
-    revenueChart = new Chart(revenueEl, {
-      type: 'line',
-      data: {
-        labels: revLabels,
-        datasets: [{
-          label: 'Revenue',
-          data: revByMonth.map(v => Math.round(v)),
-          borderColor: '#1a1a18',
-          backgroundColor: 'rgba(26,26,24,0.05)',
-          fill: true, tension: 0.35,
-          pointRadius: 4, pointBackgroundColor: '#1a1a18',
-        }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { callback: v => '₱' + Math.round(v).toLocaleString() } }, x: { grid: { display: false } } }
-      }
-    });
-  }
-
-  // Recent leads
-  const recent = leads.slice(0, 5);
-  const statusLabel = { new: 'New', negotiating: 'Negotiating', closed: 'Closed', lost: 'Lost' };
-  const recentEl = document.getElementById('recent-leads');
-  if (recentEl) {
-    if (!recent.length) {
-      recentEl.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-3);font-size:13px;">No leads yet.</div>';
-    } else {
-      recentEl.innerHTML = recent.map(l => `
-        <div class="recent-item">
-          <div class="recent-name">${esc(l.buyer_name)}</div>
-          <div class="recent-item-name" style="color:var(--text-2)">${esc(l.item_name || '—')}</div>
-          <span class="badge badge-${l.status}">${statusLabel[l.status] || l.status}</span>
-          <div class="price-cell" style="text-align:right">${l.final_price ? '₱' + Number(l.final_price).toFixed(2) : '—'}</div>
-        </div>`).join('');
-    }
-  }
-}
-
-// ── Utilities ──────────────────────────────────────────────
-function esc(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
-function clearForm(ids) { ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; }); }
-
-// ── Boot ───────────────────────────────────────────────────
-init();
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
