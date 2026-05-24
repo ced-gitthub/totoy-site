@@ -1,338 +1,210 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Totoy's Marketplace CRM</title>
-  
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-  <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketplace CRM</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <div id="login-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fdfdfc; display: flex; align-items: center; justify-content: center; z-index: 9999;">
-    <div style="width: 100%; max-width: 340px; padding: 2.5rem 2rem; background: #fff; border: 1px solid #e5e5e0; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.04); text-align: center;">
-      <div style="font-size: 32px; margin-bottom: 0.5rem;">🔒</div>
-      <h2 style="font-family: serif; font-size: 24px; margin-bottom: 6px; color: #1a1a18;">Totoy's CRM</h2>
-      <p style="color: #666; font-size: 13px; margin-bottom: 1.5rem;">Enter password to unlock dashboard</p>
-      
-      <form id="login-form" onsubmit="handleSimpleLogin(event)">
-        <div style="margin-bottom: 1.25rem;">
-          <input type="password" id="crm-password" placeholder="Password" required style="width: 100%; padding: 10px 12px; border: 1px solid #e5e5e0; border-radius: 6px; font-size: 14px; text-align: center; background: #fdfdfc;">
-        </div>
-        <button type="submit" style="width: 100%; padding: 10px; background: #1a1a18; color: #fff; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 14px;">Unlock App</button>
-      </form>
-      <p id="login-error" style="color: #de350b; font-size: 12px; margin-top: 10px; display: none;">Incorrect password. Try again.</p>
-    </div>
+  <!-- CONFIG BANNER (shown until Supabase is set up) -->
+  <div id="config-banner" class="config-banner hidden">
+    <i class="ti ti-alert-circle"></i>
+    Open <strong>config.js</strong> and add your Supabase URL + key to enable cloud sync.
+    <button onclick="dismissBanner()">Dismiss</button>
   </div>
 
-  <div id="config-banner" class="banner hidden">
-    <div class="banner-content">
-      <i class="ti ti-alert-triangle"></i>
-      <span>Using <strong>Local Mode</strong>. Set your Supabase keys in <code>config.js</code> to enable multi-device sync.</span>
-    </div>
-    <button onclick="dismissBanner()" class="banner-close">&times;</button>
-  </div>
-
-  <div class="app-container">
+  <div class="layout">
+    <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="sidebar-header">
-        <h1 class="logo-text">Totoy CRM</h1>
-        <div id="sync-status" class="sync-badge">
-          <i class="ti ti-cloud-off"></i> <span>Checking...</span>
-        </div>
+      <div class="logo">
+        <i class="ti ti-shopping-bag"></i>
+        <span>Marketplace CRM</span>
       </div>
-      <nav class="sidebar-nav">
-        <button class="nav-item active" data-tab="dashboard">
-          <i class="ti ti-layout-dashboard"></i> <span>Dashboard</span>
-        </button>
-        <button class="nav-item" data-tab="listings">
-          <i class="ti ti-extended-reality"></i> <span>Inventory</span>
-        </button>
-        <button class="nav-item" data-tab="leads">
-          <i class="ti ti-users-group"></i> <span>Leads</span>
-        </button>
-        <button class="nav-item" data-tab="sellers">
-          <i class="ti ti-building-store"></i> <span>Sellers</span>
-        </button>
+      <nav class="sidenav">
+        <button class="nav-item active" data-tab="dashboard"><i class="ti ti-layout-dashboard"></i> Dashboard</button>
+        <button class="nav-item" data-tab="listings"><i class="ti ti-tag"></i> Listings</button>
+        <button class="nav-item" data-tab="leads"><i class="ti ti-users"></i> Leads</button>
+        <button class="nav-item" data-tab="sellers"><i class="ti ti-building-store"></i> Sellers</button>
       </nav>
+      <div class="sync-status" id="sync-status">
+        <i class="ti ti-cloud-off"></i> <span>Local only</span>
+      </div>
     </aside>
 
-    <main class="main-content">
-      
-      <section id="tab-dashboard" class="tab-section active">
-        <header class="section-header">
-          <div>
-            <h2>Overview</h2>
-            <p id="dashboard-date" class="subtitle"></p>
-          </div>
-        </header>
+    <!-- Main -->
+    <main class="main">
 
-        <div id="metrics-grid" class="metrics-grid"></div>
-
+      <!-- DASHBOARD -->
+      <section class="tab-section active" id="tab-dashboard">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+          <span class="page-subtitle" id="dashboard-date"></span>
+        </div>
+        <div class="metrics-grid" id="metrics-grid"></div>
         <div class="charts-row">
           <div class="chart-card">
-            <h3>Sales Funnel Conversion</h3>
-            <div class="chart-container">
-              <canvas id="funnelChart"></canvas>
-            </div>
+            <div class="chart-title">Lead funnel</div>
+            <div class="chart-wrap"><canvas id="funnelChart" role="img" aria-label="Lead funnel bar chart">Funnel data</canvas></div>
           </div>
           <div class="chart-card">
-            <h3>Revenue Growth Trajectory</h3>
-            <div class="chart-container">
-              <canvas id="revenueChart"></canvas>
-            </div>
+            <div class="chart-title">Revenue — last 6 months</div>
+            <div class="chart-wrap"><canvas id="revenueChart" role="img" aria-label="Revenue trend line chart">Revenue data</canvas></div>
           </div>
         </div>
-
-        <div class="dashboard-secondary-row">
-          <div class="data-card full-width">
-            <h3>Recent Updates Log</h3>
-            <div id="recent-leads" class="recent-list"></div>
-          </div>
+        <div class="recent-card">
+          <div class="chart-title">Recent leads</div>
+          <div id="recent-leads"></div>
         </div>
       </section>
 
-      <section id="tab-listings" class="tab-section">
-        <header class="section-header">
-          <div>
-            <h2>Inventory Management</h2>
-            <p class="subtitle">Track active assets, base buy costs, and live market margins.</p>
-          </div>
-          <button class="btn btn-primary" onclick="openModal('listing-modal')">
-            <i class="ti ti-plus"></i> New Listing
-          </button>
-        </header>
-
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="ti ti-search"></i>
-            <input type="text" id="listing-search" placeholder="Search items or sources..." oninput="renderListings()">
-          </div>
-          <select id="listing-filter" onchange="renderListings()" class="select-filter">
-            <option value="all">All Inventory</option>
-            <option value="active">Active Only</option>
+      <!-- LISTINGS -->
+      <section class="tab-section" id="tab-listings">
+        <div class="page-header">
+          <h1>Listings</h1>
+          <button class="btn-primary" onclick="openModal('listing-modal')"><i class="ti ti-plus"></i> Add listing</button>
+        </div>
+        <div class="filter-row">
+          <input type="text" id="listing-search" placeholder="Search listings…" oninput="renderListings()" />
+          <select id="listing-filter" onchange="renderListings()">
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
             <option value="sold">Sold</option>
-            <option value="delisted">Delisted</option>
+            <option value="paused">Paused</option>
           </select>
         </div>
-
-        <div class="data-card table-responsive">
+        <div class="table-wrap">
           <table class="data-table">
-            <thead>
-              <tr>
-                <th>Item Details</th>
-                <th class="price-cell">Buy Price</th>
-                <th class="price-cell">Ask Price</th>
-                <th>Proj. Margin</th>
-                <th>Source/Seller</th>
-                <th>Status</th>
-                <th style="width:50px"></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Item</th><th>Buy price</th><th>Ask price</th><th>Margin</th><th>Source</th><th>Status</th><th></th></tr></thead>
             <tbody id="listings-tbody"></tbody>
           </table>
         </div>
       </section>
 
-      <section id="tab-leads" class="tab-section">
-        <header class="section-header">
-          <div>
-            <h2>Deal Pipeline</h2>
-            <p class="subtitle">Track buyer inquiries, custom pricing counter-offers, and deal closures.</p>
-          </div>
-          <button class="btn btn-primary" onclick="openModal('lead-modal')">
-            <i class="ti ti-plus"></i> Log Lead
-          </button>
-        </header>
-
-        <div class="table-actions">
-          <div class="search-box">
-            <i class="ti ti-search"></i>
-            <input type="text" id="lead-search" placeholder="Search buyers or items..." oninput="renderLeads()">
-          </div>
-          <select id="lead-filter" onchange="renderLeads()" class="select-filter">
-            <option value="all">All Stages</option>
-            <option value="new">New Inquiry</option>
+      <!-- LEADS -->
+      <section class="tab-section" id="tab-leads">
+        <div class="page-header">
+          <h1>Leads</h1>
+          <button class="btn-primary" onclick="openModal('lead-modal')"><i class="ti ti-plus"></i> Log lead</button>
+        </div>
+        <div class="filter-row">
+          <input type="text" id="lead-search" placeholder="Search leads…" oninput="renderLeads()" />
+          <select id="lead-filter" onchange="renderLeads()">
+            <option value="all">All stages</option>
+            <option value="new">New</option>
             <option value="negotiating">Negotiating</option>
-            <option value="closed">Closed / Won</option>
+            <option value="closed">Closed</option>
             <option value="lost">Lost</option>
           </select>
         </div>
-
-        <div class="data-card table-responsive">
+        <div class="table-wrap">
           <table class="data-table">
-            <thead>
-              <tr>
-                <th>Buyer Name</th>
-                <th>Target Item</th>
-                <th>Pipeline Stage</th>
-                <th class="price-cell">Final Price</th>
-                <th>Notes Summary</th>
-                <th style="width:50px"></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Buyer</th><th>Item</th><th>Stage</th><th>Final price</th><th>Notes</th><th></th></tr></thead>
             <tbody id="leads-tbody"></tbody>
           </table>
         </div>
       </section>
 
-      <section id="tab-sellers" class="tab-section">
-        <header class="section-header">
-          <div>
-            <h2>Supplier Network</h2>
-            <p class="subtitle">Directory of trusted sources, product specialties, and ratings.</p>
-          </div>
-          <button class="btn btn-primary" onclick="openModal('seller-modal')">
-            <i class="ti ti-plus"></i> Add Supplier
-          </button>
-        </header>
-        <div id="sellers-grid" class="sellers-grid"></div>
+      <!-- SELLERS -->
+      <section class="tab-section" id="tab-sellers">
+        <div class="page-header">
+          <h1>Sellers</h1>
+          <button class="btn-primary" onclick="openModal('seller-modal')"><i class="ti ti-plus"></i> Add seller</button>
+        </div>
+        <div class="sellers-grid" id="sellers-grid"></div>
       </section>
 
     </main>
   </div>
 
-  <div id="listing-modal" class="modal-overlay hidden">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Create New Listing</h3>
-        <button onclick="closeModal('listing-modal')" class="btn-close">&times;</button>
-      </div>
+  <!-- MODAL: Add Listing -->
+  <div class="modal-overlay hidden" id="listing-modal">
+    <div class="modal">
+      <div class="modal-header"><h2>Add listing</h2><button onclick="closeModal('listing-modal')" class="modal-close"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
-        <div class="form-group">
-          <label>Item Name *</label>
-          <input type="text" id="l-name" placeholder="e.g., iPhone 13 Pro Max">
-        </div>
+        <label>Item name <input type="text" id="l-name" placeholder="e.g. iPhone 14 Pro" /></label>
         <div class="form-row">
-          <div class="form-group">
-            <label>Buy Price (₱)</label>
-            <input type="number" id="l-buy" placeholder="0.00">
-          </div>
-          <div class="form-group">
-            <label>Asking Price (₱)</label>
-            <input type="number" id="l-ask" placeholder="0.00">
-          </div>
+          <label>Buy price ($) <input type="number" id="l-buy" placeholder="0.00" /></label>
+          <label>Ask price ($) <input type="number" id="l-ask" placeholder="0.00" /></label>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Listing Status</label>
-            <select id="l-status">
-              <option value="active">Active / Available</option>
-              <option value="sold">Sold Out</option>
-              <option value="delisted">Delisted</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Source / Supplier</label>
-            <input type="text" id="l-source" placeholder="Who sold it to you?">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Item Notes</label>
-          <textarea id="l-notes" rows="3" placeholder="Condition details, issues, configuration specs..."></textarea>
-        </div>
+        <label>Status
+          <select id="l-status">
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+            <option value="sold">Sold</option>
+          </select>
+        </label>
+        <label>Source seller <input type="text" id="l-source" placeholder="Where did you buy it from?" /></label>
+        <label>Notes <textarea id="l-notes" rows="2" placeholder="Condition, details…"></textarea></label>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('listing-modal')">Cancel</button>
-        <button class="btn btn-primary" onclick="saveListing()">Save Asset</button>
+        <button class="btn-secondary" onclick="closeModal('listing-modal')">Cancel</button>
+        <button class="btn-primary" onclick="saveListing()">Save listing</button>
       </div>
     </div>
   </div>
 
-  <div id="lead-modal" class="modal-overlay hidden">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Log Customer Inquiry</h3>
-        <button onclick="closeModal('lead-modal')" class="btn-close">&times;</button>
-      </div>
+  <!-- MODAL: Log Lead -->
+  <div class="modal-overlay hidden" id="lead-modal">
+    <div class="modal">
+      <div class="modal-header"><h2>Log a lead</h2><button onclick="closeModal('lead-modal')" class="modal-close"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
-        <div class="form-group">
-          <label>Buyer Contact Name *</label>
-          <input type="text" id="ld-name" placeholder="e.g., Juan Dela Cruz">
-        </div>
-        <div class="form-group">
-          <label>Target Item interested in</label>
-          <input type="text" id="ld-item" placeholder="e.g., iPhone 13 Pro Max">
-        </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Pipeline Stage</label>
-            <select id="ld-status">
-              <option value="new">New Inquiry / Lead</option>
-              <option value="negotiating">Negotiation in Progress</option>
-              <option value="closed">Closed / Deal Won</option>
-              <option value="lost">Lost Inquiry</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Agreed Final Price (₱)</label>
-            <input type="number" id="ld-price" placeholder="Leave blank if negotiating">
-          </div>
+          <label>Buyer name / handle <input type="text" id="ld-name" placeholder="FB name or @handle" /></label>
+          <label>Item they asked about <input type="text" id="ld-item" placeholder="e.g. iPhone 14 Pro" /></label>
         </div>
-        <div class="form-group">
-          <label>Conversation Notes</label>
-          <textarea id="ld-notes" rows="3" placeholder="Offers made, meet-up preferences, delivery requests..."></textarea>
-        </div>
+        <label>Stage
+          <select id="ld-status">
+            <option value="new">New inquiry</option>
+            <option value="negotiating">Negotiating</option>
+            <option value="closed">Closed (won)</option>
+            <option value="lost">Lost</option>
+          </select>
+        </label>
+        <label>Final price ($) — if closed <input type="number" id="ld-price" placeholder="0.00" /></label>
+        <label>Notes <textarea id="ld-notes" rows="2" placeholder="What did they say? Any context…"></textarea></label>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('lead-modal')">Cancel</button>
-        <button class="btn btn-primary" onclick="saveLead()">Log Lead</button>
+        <button class="btn-secondary" onclick="closeModal('lead-modal')">Cancel</button>
+        <button class="btn-primary" onclick="saveLead()">Save lead</button>
       </div>
     </div>
   </div>
 
-  <div id="seller-modal" class="modal-overlay hidden">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>Add Supplier Profile</h3>
-        <button onclick="closeModal('seller-modal')" class="btn-close">&times;</button>
-      </div>
+  <!-- MODAL: Add Seller -->
+  <div class="modal-overlay hidden" id="seller-modal">
+    <div class="modal">
+      <div class="modal-header"><h2>Add seller</h2><button onclick="closeModal('seller-modal')" class="modal-close"><i class="ti ti-x"></i></button></div>
       <div class="modal-body">
-        <div class="form-group">
-          <label>Supplier Name *</label>
-          <input type="text" id="s-name" placeholder="e.g., Gadget Wholesaler PH">
-        </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Trust Rating</label>
+          <label>Seller name <input type="text" id="s-name" placeholder="Name or FB profile" /></label>
+          <label>Rating
             <select id="s-rating">
-              <option value="5">⭐⭐⭐⭐⭐ 5 Stars</option>
-              <option value="4">⭐⭐⭐⭐ 4 Stars</option>
-              <option value="3">⭐⭐⭐ 3 Stars</option>
-              <option value="2">⭐⭐ 2 Stars</option>
-              <option value="1">⭐ 1 Star</option>
+              <option value="5">★★★★★ Excellent</option>
+              <option value="4">★★★★☆ Good</option>
+              <option value="3">★★★☆☆ Average</option>
+              <option value="2">★★☆☆☆ Poor</option>
+              <option value="1">★☆☆☆☆ Avoid</option>
             </select>
-          </div>
-          <div class="form-group">
-            <label>Product Specialty</label>
-            <input type="text" id="s-specialty" placeholder="e.g., Apple Products, Defects, etc.">
-          </div>
+          </label>
         </div>
-        <div class="form-group">
-          <label>Contact Link / Social Handles</label>
-          <input type="text" id="s-contact" placeholder="fb.com/username or phone number">
-        </div>
-        <div class="form-group">
-          <label>Private Background Notes</label>
-          <textarea id="s-notes" rows="3" placeholder="Supplier pricing patterns, refund speeds, reliability details..."></textarea>
-        </div>
+        <label>Specializes in <input type="text" id="s-specialty" placeholder="e.g. electronics, furniture, clothing" /></label>
+        <label>Contact / link <input type="text" id="s-contact" placeholder="FB link or phone" /></label>
+        <label>Notes <textarea id="s-notes" rows="2" placeholder="Reliability, pricing notes…"></textarea></label>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeModal('seller-modal')">Cancel</button>
-        <button class="btn btn-primary" onclick="saveSeller()">Save Supplier</button>
+        <button class="btn-secondary" onclick="closeModal('seller-modal')">Cancel</button>
+        <button class="btn-primary" onclick="saveSeller()">Save seller</button>
       </div>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
