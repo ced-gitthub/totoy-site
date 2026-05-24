@@ -1,5 +1,5 @@
 // ============================================================
-//  MARKETPLACE CRM — Upgraded app.js (Simple Pass + Actions)
+//  MARKETPLACE CRM — Upgraded app.js (Simple Pass + Actions + PHP ₱)
 // ============================================================
 
 let db = null;
@@ -139,7 +139,7 @@ document.addEventListener('click', e => {
   }
 });
 
-// ── Listings + Actions ─────────────────────────────────────
+// ── Listings + PHP ₱ Actions ───────────────────────────────
 async function saveListing() {
   const name   = document.getElementById('l-name').value.trim();
   const buy    = parseFloat(document.getElementById('l-buy').value)  || 0;
@@ -193,8 +193,8 @@ function renderListings() {
     
     return `<tr>
       <td><div class="cell-name">${esc(l.name)}</div>${l.notes ? `<div class="cell-sub">${esc(l.notes)}</div>` : ''}</td>
-      <td class="price-cell">$${buy.toFixed(2)}</td>
-      <td class="price-cell">$${ask.toFixed(2)}</td>
+      <td class="price-cell">₱${buy.toFixed(2)}</td>
+      <td class="price-cell">₱${ask.toFixed(2)}</td>
       <td class="${marginClass}">${margin !== '—' ? margin + '%' : '—'}</td>
       <td style="color: var(--text-2)">${esc(l.source_seller || '—')}</td>
       <td>
@@ -232,7 +232,7 @@ async function deleteListing(id) {
   renderDashboard();
 }
 
-// ── Leads + Actions ────────────────────────────────────────
+// ── Leads + PHP ₱ Actions ──────────────────────────────────
 async function saveLead() {
   const name   = document.getElementById('ld-name').value.trim();
   const item   = document.getElementById('ld-item').value.trim();
@@ -289,7 +289,7 @@ function renderLeads() {
       </select>
     </td>
     <td>
-      <input type="number" value="${l.final_price || ''}" placeholder="—" onchange="updateLeadPrice('${l.id}', this.value)" style="width: 80px; padding: 4px; border: 1px solid #e5e5e0; border-radius: 4px; text-align: right; font-size: 13px;">
+      <span style="font-size: 13px; color: var(--text-2); margin-right: 2px;">₱</span><input type="number" value="${l.final_price || ''}" placeholder="—" onchange="updateLeadPrice('${l.id}', this.value)" style="width: 80px; padding: 4px; border: 1px solid #e5e5e0; border-radius: 4px; text-align: right; font-size: 13px;">
     </td>
     <td style="color: var(--text-2); font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(l.notes || '—')}</td>
     <td><button class="btn-icon" onclick="deleteLead('${l.id}')" aria-label="delete"><i class="ti ti-trash"></i></button></td>
@@ -389,7 +389,7 @@ async function deleteSeller(id) {
   renderSellers();
 }
 
-// ── Dashboard ──────────────────────────────────────────────
+// ── Dashboard + Metrics Realignment ────────────────────────
 function renderDashboard() {
   const total   = leads.length;
   const closed  = leads.filter(l => l.status === 'closed').length;
@@ -406,9 +406,9 @@ function renderDashboard() {
       <div class="metric"><div class="metric-label">Total leads</div><div class="metric-value">${total}</div><div class="metric-sub">all time</div></div>
       <div class="metric"><div class="metric-label">Closed deals</div><div class="metric-value">${closed}</div><div class="metric-sub">won</div></div>
       <div class="metric"><div class="metric-label">Close rate</div><div class="metric-value">${rate}%</div><div class="metric-sub">inquiries → sales</div></div>
-      <div class="metric"><div class="metric-label">Revenue</div><div class="metric-value">$${Math.round(revenue).toLocaleString()}</div><div class="metric-sub">from closed deals</div></div>
+      <div class="metric"><div class="metric-label">Revenue</div><div class="metric-value">₱${Math.round(revenue).toLocaleString()}</div><div class="metric-sub">from closed deals</div></div>
       <div class="metric"><div class="metric-label">Active listings</div><div class="metric-value">${active}</div><div class="metric-sub">live now</div></div>
-      <div class="metric"><div class="metric-label">Potential profit</div><div class="metric-value">$${Math.round(profit).toLocaleString()}</div><div class="metric-sub">ask − buy</div></div>
+      <div class="metric"><div class="metric-label">Potential profit</div><div class="metric-value">₱${Math.round(profit).toLocaleString()}</div><div class="metric-sub">ask − buy</div></div>
     `;
   }
 
@@ -435,7 +435,7 @@ function renderDashboard() {
     });
   }
 
-  // Revenue chart (last 6 months)
+  // Revenue chart (PHP ₱ axis scaling)
   const revenueEl = document.getElementById('revenueChart');
   if (revenueEl) {
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -465,7 +465,7 @@ function renderDashboard() {
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { callback: v => '$' + Math.round(v).toLocaleString() } }, x: { grid: { display: false } } }
+        scales: { y: { beginAtZero: true, ticks: { callback: v => '₱' + Math.round(v).toLocaleString() } }, x: { grid: { display: false } } }
       }
     });
   }
@@ -483,7 +483,7 @@ function renderDashboard() {
           <div class="recent-name">${esc(l.buyer_name)}</div>
           <div class="recent-item-name" style="color:var(--text-2)">${esc(l.item_name || '—')}</div>
           <span class="badge badge-${l.status}">${statusLabel[l.status] || l.status}</span>
-          <div class="price-cell" style="text-align:right">${l.final_price ? '$' + Number(l.final_price).toFixed(2) : '—'}</div>
+          <div class="price-cell" style="text-align:right">${l.final_price ? '₱' + Number(l.final_price).toFixed(2) : '—'}</div>
         </div>`).join('');
     }
   }
