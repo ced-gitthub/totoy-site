@@ -2,7 +2,8 @@
 //  MARKETPLACE CRM — app.js
 //  - Login screen with 2 users
 //  - Philippine Peso (₱) currency
-//  - Supabase cloud sync or localStorage fallback
+//  - Edit modal for listings + leads
+//  - Lead asking price, final price, profit calc
 // ============================================================
 
 const USERS = [
@@ -17,6 +18,7 @@ let leads = [];
 let sellers = [];
 let funnelChart = null;
 let revenueChart = null;
+let editingId = null;
 
 // ── Login ──────────────────────────────────────────────────
 function checkLogin() {
@@ -51,9 +53,7 @@ function doLogout() {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !document.getElementById('login-screen').classList.contains('hidden')) {
-    doLogin();
-  }
+  if (e.key === 'Enter' && !document.getElementById('login-screen').classList.contains('hidden')) doLogin();
 });
 
 // ── Init ───────────────────────────────────────────────────
@@ -64,7 +64,7 @@ async function init() {
       useCloud = true;
       setSyncStatus(true);
     } catch (e) {
-      console.warn('Supabase init failed, falling back to localStorage', e);
+      console.warn('Supabase init failed', e);
     }
   } else {
     document.getElementById('config-banner').classList.remove('hidden');
@@ -85,18 +85,11 @@ function setDate() {
 
 function setSyncStatus(synced) {
   const el = document.getElementById('sync-status');
-  if (synced) {
-    el.innerHTML = '<i class="ti ti-cloud-check"></i> <span>Synced</span>';
-    el.classList.add('synced');
-  } else {
-    el.innerHTML = '<i class="ti ti-cloud-off"></i> <span>Local only</span>';
-    el.classList.remove('synced');
-  }
+  if (synced) { el.innerHTML = '<i class="ti ti-cloud-check"></i> <span>Synced</span>'; el.classList.add('synced'); }
+  else        { el.innerHTML = '<i class="ti ti-cloud-off"></i> <span>Local only</span>'; el.classList.remove('synced'); }
 }
 
-function dismissBanner() {
-  document.getElementById('config-banner').classList.add('hidden');
-}
+function dismissBanner() { document.getElementById('config-banner').classList.add('hidden'); }
 
 // ── Navigation ─────────────────────────────────────────────
 function setupNavigation() {
@@ -143,7 +136,31 @@ document.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) e.target.classList.add('hidden');
 });
 
-// ── Listings ───────────────────────────────────────────────
+// ── LISTINGS ───────────────────────────────────────────────
+function openAddListing() {
+  editingId = null;
+  clearForm(['l-name','l-buy','l-ask','l-source','l-notes']);
+  document.getElementById('l-status').value = 'active';
+  document.getElementById('listing-modal-title').textContent = 'Add listing';
+  document.getElementById('listing-save-btn').textContent = 'Save listing';
+  openModal('listing-modal');
+}
+
+function openEditListing(id) {
+  const l = listings.find(x => String(x.id) === String(id));
+  if (!l) return;
+  editingId = id;
+  document.getElementById('l-name').value   = l.name || '';
+  document.getElementById('l-buy').value    = l.buy_price || '';
+  document.getElementById('l-ask').value    = l.ask_price || '';
+  document.getElementById('l-status').value = l.status || 'active';
+  document.getElementById('l-source').value = l.source_seller || '';
+  document.getElementById('l-notes').value  = l.notes || '';
+  document.getElementById('listing-modal-title').textContent = 'Edit listing';
+  document.getElementById('listing-save-btn').textContent = 'Update listing';
+  openModal('listing-modal');
+}
+
 async function saveListing() {
   const name   = document.getElementById('l-name').value.trim();
   const buy    = parseFloat(document.getElementById('l-buy').value)  || 0;
@@ -155,17 +172,28 @@ async function saveListing() {
 
   const record = { name, buy_price: buy, ask_price: ask, status, source_seller: source, notes };
 
-  if (useCloud) {
-    const { data, error } = await db.from('listings').insert([record]).select();
-    if (error) return alert('Error saving: ' + error.message);
-    listings.unshift(data[0]);
-  } else {
-    record.id = Date.now();
-    record.created_at = new Date().toISOString();
-    listings.unshift(record);
+  if (editingId) {
+    if (useCloud) {
+      const { error } = await db.from('listings').update(record).eq('id', editingId);
+      if (error) return alert('Error updating: ' + error.message);
+    }
+    const idx = listings.findIndex(x => String(x.id) === String(editingId));
+    if (idx !== -1) listings[idx] = { ...listings[idx], ...record };
     saveLocal();
+  } else {
+    if (useCloud) {
+      const { data, error } = await db.from('listings').insert([record]).select();
+      if (error) return alert('Error saving: ' + error.message);
+      listings.unshift(data[0]);
+    } else {
+      record.id = Date.now();
+      record.created_at = new Date().toISOString();
+      listings.unshift(record);
+      saveLocal();
+    }
   }
 
+  editingId = null;
   closeModal('listing-modal');
   clearForm(['l-name','l-buy','l-ask','l-source','l-notes']);
   document.getElementById('l-status').value = 'active';
@@ -196,12 +224,15 @@ function renderListings() {
     const marginClass = parseFloat(margin) >= 0 ? 'margin-pos' : 'margin-neg';
     return `<tr>
       <td><div class="cell-name">${esc(l.name)}</div>${l.notes ? `<div class="cell-sub">${esc(l.notes)}</div>` : ''}</td>
-      <td class="price-cell">₱${buy.toLocaleString('en-PH', {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      <td class="price-cell">₱${ask.toLocaleString('en-PH', {minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td class="price-cell">₱${fmt(buy)}</td>
+      <td class="price-cell">₱${fmt(ask)}</td>
       <td class="${marginClass}">${margin !== '—' ? margin + '%' : '—'}</td>
       <td style="color:var(--text-2)">${esc(l.source_seller || '—')}</td>
       <td><span class="badge badge-${l.status}">${capitalize(l.status)}</span></td>
-      <td><button class="btn-icon" onclick="deleteListing('${l.id}')" aria-label="delete"><i class="ti ti-trash"></i></button></td>
+      <td style="display:flex;gap:4px;align-items:center;">
+        <button class="btn-icon" onclick="openEditListing('${l.id}')" title="Edit"><i class="ti ti-pencil"></i></button>
+        <button class="btn-icon" onclick="deleteListing('${l.id}')" title="Delete"><i class="ti ti-trash"></i></button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -215,30 +246,85 @@ async function deleteListing(id) {
   renderDashboard();
 }
 
-// ── Leads ──────────────────────────────────────────────────
+// ── LEADS ──────────────────────────────────────────────────
+function openAddLead() {
+  editingId = null;
+  clearForm(['ld-name','ld-item','ld-ask-price','ld-price','ld-notes']);
+  document.getElementById('ld-status').value = 'new';
+  document.getElementById('lead-modal-title').textContent = 'Log a lead';
+  document.getElementById('lead-save-btn').textContent = 'Save lead';
+  updateLeadProfit();
+  openModal('lead-modal');
+}
+
+function openEditLead(id) {
+  const l = leads.find(x => String(x.id) === String(id));
+  if (!l) return;
+  editingId = id;
+  document.getElementById('ld-name').value       = l.buyer_name || '';
+  document.getElementById('ld-item').value       = l.item_name || '';
+  document.getElementById('ld-status').value     = l.status || 'new';
+  document.getElementById('ld-ask-price').value  = l.ask_price || '';
+  document.getElementById('ld-price').value      = l.final_price || '';
+  document.getElementById('ld-notes').value      = l.notes || '';
+  document.getElementById('lead-modal-title').textContent = 'Edit lead';
+  document.getElementById('lead-save-btn').textContent = 'Update lead';
+  updateLeadProfit();
+  openModal('lead-modal');
+}
+
+function updateLeadProfit() {
+  const ask   = parseFloat(document.getElementById('ld-ask-price')?.value) || 0;
+  const final = parseFloat(document.getElementById('ld-price')?.value)     || 0;
+  const el    = document.getElementById('lead-profit-preview');
+  if (!el) return;
+  if (ask > 0 && final > 0) {
+    const profit = final - ask;
+    const pct    = ((profit / ask) * 100).toFixed(1);
+    el.textContent = (profit >= 0 ? '▲ ' : '▼ ') + '₱' + Math.abs(profit).toLocaleString('en-PH') + ' (' + pct + '%)';
+    el.style.color = profit >= 0 ? 'var(--green-fg)' : 'var(--red-fg)';
+    el.parentElement.classList.remove('hidden');
+  } else {
+    el.parentElement.classList.add('hidden');
+  }
+}
+
 async function saveLead() {
-  const name   = document.getElementById('ld-name').value.trim();
-  const item   = document.getElementById('ld-item').value.trim();
-  const status = document.getElementById('ld-status').value;
-  const price  = parseFloat(document.getElementById('ld-price').value) || 0;
-  const notes  = document.getElementById('ld-notes').value.trim();
+  const name     = document.getElementById('ld-name').value.trim();
+  const item     = document.getElementById('ld-item').value.trim();
+  const status   = document.getElementById('ld-status').value;
+  const askPrice = parseFloat(document.getElementById('ld-ask-price').value) || 0;
+  const price    = parseFloat(document.getElementById('ld-price').value)     || 0;
+  const notes    = document.getElementById('ld-notes').value.trim();
   if (!name) return alert('Please enter a buyer name.');
 
-  const record = { buyer_name: name, item_name: item, status, final_price: price, notes };
+  const profit = askPrice > 0 && price > 0 ? price - askPrice : null;
+  const record = { buyer_name: name, item_name: item, status, ask_price: askPrice, final_price: price, profit, notes };
 
-  if (useCloud) {
-    const { data, error } = await db.from('leads').insert([record]).select();
-    if (error) return alert('Error saving: ' + error.message);
-    leads.unshift(data[0]);
-  } else {
-    record.id = Date.now();
-    record.created_at = new Date().toISOString();
-    leads.unshift(record);
+  if (editingId) {
+    if (useCloud) {
+      const { error } = await db.from('leads').update(record).eq('id', editingId);
+      if (error) return alert('Error updating: ' + error.message);
+    }
+    const idx = leads.findIndex(x => String(x.id) === String(editingId));
+    if (idx !== -1) leads[idx] = { ...leads[idx], ...record };
     saveLocal();
+  } else {
+    if (useCloud) {
+      const { data, error } = await db.from('leads').insert([record]).select();
+      if (error) return alert('Error saving: ' + error.message);
+      leads.unshift(data[0]);
+    } else {
+      record.id = Date.now();
+      record.created_at = new Date().toISOString();
+      leads.unshift(record);
+      saveLocal();
+    }
   }
 
+  editingId = null;
   closeModal('lead-modal');
-  clearForm(['ld-name','ld-item','ld-price','ld-notes']);
+  clearForm(['ld-name','ld-item','ld-ask-price','ld-price','ld-notes']);
   document.getElementById('ld-status').value = 'new';
   renderLeads();
   renderDashboard();
@@ -256,19 +342,32 @@ function renderLeads() {
   });
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">No leads yet — log one to start tracking.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No leads yet — log one to start tracking.</td></tr>`;
     return;
   }
 
   const statusLabel = { new: 'New', negotiating: 'Negotiating', closed: 'Closed', lost: 'Lost' };
-  tbody.innerHTML = filtered.map(l => `<tr>
-    <td class="cell-name">${esc(l.buyer_name)}</td>
-    <td style="color:var(--text-2)">${esc(l.item_name || '—')}</td>
-    <td><span class="badge badge-${l.status}">${statusLabel[l.status] || l.status}</span></td>
-    <td class="price-cell">${l.final_price ? '₱' + Number(l.final_price).toLocaleString('en-PH', {minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td>
-    <td style="color:var(--text-2);font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(l.notes || '—')}</td>
-    <td><button class="btn-icon" onclick="deleteLead('${l.id}')" aria-label="delete"><i class="ti ti-trash"></i></button></td>
-  </tr>`).join('');
+  tbody.innerHTML = filtered.map(l => {
+    const profit = l.ask_price > 0 && l.final_price > 0 ? l.final_price - l.ask_price : null;
+    const profitHtml = profit !== null
+      ? `<span style="color:${profit >= 0 ? 'var(--green-fg)' : 'var(--red-fg)'};font-weight:500;">
+          ${profit >= 0 ? '▲' : '▼'} ₱${Math.abs(profit).toLocaleString('en-PH')}
+         </span>`
+      : '—';
+    return `<tr>
+      <td class="cell-name">${esc(l.buyer_name)}</td>
+      <td style="color:var(--text-2)">${esc(l.item_name || '—')}</td>
+      <td><span class="badge badge-${l.status}">${statusLabel[l.status] || l.status}</span></td>
+      <td class="price-cell">${l.ask_price ? '₱' + fmt(l.ask_price) : '—'}</td>
+      <td class="price-cell">${l.final_price ? '₱' + fmt(l.final_price) : '—'}</td>
+      <td>${profitHtml}</td>
+      <td style="color:var(--text-2);font-size:12px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(l.notes || '—')}</td>
+      <td style="display:flex;gap:4px;align-items:center;">
+        <button class="btn-icon" onclick="openEditLead('${l.id}')" title="Edit"><i class="ti ti-pencil"></i></button>
+        <button class="btn-icon" onclick="deleteLead('${l.id}')" title="Delete"><i class="ti ti-trash"></i></button>
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 async function deleteLead(id) {
@@ -280,7 +379,7 @@ async function deleteLead(id) {
   renderDashboard();
 }
 
-// ── Sellers ────────────────────────────────────────────────
+// ── SELLERS ────────────────────────────────────────────────
 async function saveSeller() {
   const name      = document.getElementById('s-name').value.trim();
   const rating    = parseInt(document.getElementById('s-rating').value);
@@ -326,7 +425,7 @@ function renderSellers() {
             <div class="seller-specialty">${esc(s.specialty || 'General')}</div>
           </div>
         </div>
-        <button class="btn-icon" onclick="deleteSeller('${s.id}')" aria-label="delete"><i class="ti ti-trash"></i></button>
+        <button class="btn-icon" onclick="deleteSeller('${s.id}')" title="Delete"><i class="ti ti-trash"></i></button>
       </div>
       <div class="seller-stars">${stars}</div>
       ${s.contact ? `<div class="seller-contact"><i class="ti ti-link" style="font-size:12px"></i> ${esc(s.contact)}</div>` : ''}
@@ -343,26 +442,24 @@ async function deleteSeller(id) {
   renderSellers();
 }
 
-// ── Dashboard ──────────────────────────────────────────────
+// ── DASHBOARD ──────────────────────────────────────────────
 function renderDashboard() {
-  const total    = leads.length;
-  const closed   = leads.filter(l => l.status === 'closed').length;
-  const negot    = leads.filter(l => l.status === 'negotiating').length;
-  const lost     = leads.filter(l => l.status === 'lost').length;
-  const rate     = total > 0 ? Math.round((closed / total) * 100) : 0;
-  const revenue  = leads.filter(l => l.status === 'closed').reduce((s, l) => s + (l.final_price || 0), 0);
-  const profit   = listings.reduce((s, l) => s + ((l.ask_price || 0) - (l.buy_price || 0)), 0);
-  const active   = listings.filter(l => l.status === 'active').length;
-
-  const fmt = v => '₱' + Math.round(v).toLocaleString('en-PH');
+  const total   = leads.length;
+  const closed  = leads.filter(l => l.status === 'closed').length;
+  const negot   = leads.filter(l => l.status === 'negotiating').length;
+  const lost    = leads.filter(l => l.status === 'lost').length;
+  const rate    = total > 0 ? Math.round((closed / total) * 100) : 0;
+  const revenue = leads.filter(l => l.status === 'closed').reduce((s, l) => s + (l.final_price || 0), 0);
+  const totalProfit = leads.filter(l => l.status === 'closed' && l.profit != null).reduce((s, l) => s + l.profit, 0);
+  const active  = listings.filter(l => l.status === 'active').length;
 
   document.getElementById('metrics-grid').innerHTML = `
     <div class="metric"><div class="metric-label">Total leads</div><div class="metric-value">${total}</div><div class="metric-sub">all time</div></div>
     <div class="metric"><div class="metric-label">Closed deals</div><div class="metric-value">${closed}</div><div class="metric-sub">won</div></div>
     <div class="metric"><div class="metric-label">Close rate</div><div class="metric-value">${rate}%</div><div class="metric-sub">inquiries → sales</div></div>
-    <div class="metric"><div class="metric-label">Revenue</div><div class="metric-value">${fmt(revenue)}</div><div class="metric-sub">from closed deals</div></div>
+    <div class="metric"><div class="metric-label">Revenue</div><div class="metric-value">₱${Math.round(revenue).toLocaleString('en-PH')}</div><div class="metric-sub">from closed deals</div></div>
     <div class="metric"><div class="metric-label">Active listings</div><div class="metric-value">${active}</div><div class="metric-sub">live now</div></div>
-    <div class="metric"><div class="metric-label">Potential profit</div><div class="metric-value">${fmt(profit)}</div><div class="metric-sub">ask − buy</div></div>
+    <div class="metric"><div class="metric-label">Total profit</div><div class="metric-value" style="color:var(--green-fg)">₱${Math.round(totalProfit).toLocaleString('en-PH')}</div><div class="metric-sub">closed deals</div></div>
   `;
 
   if (funnelChart) funnelChart.destroy();
@@ -405,11 +502,12 @@ function renderDashboard() {
         <div class="recent-name">${esc(l.buyer_name)}</div>
         <div class="recent-item-name" style="color:var(--text-2)">${esc(l.item_name || '—')}</div>
         <span class="badge badge-${l.status}">${statusLabel[l.status] || l.status}</span>
-        <div class="price-cell" style="text-align:right">${l.final_price ? '₱' + Number(l.final_price).toLocaleString('en-PH', {minimumFractionDigits:2}) : '—'}</div>
+        <div class="price-cell" style="text-align:right">${l.final_price ? '₱' + fmt(l.final_price) : '—'}</div>
       </div>`).join('');
 }
 
 // ── Utilities ──────────────────────────────────────────────
+function fmt(v) { return Number(v).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function esc(str) {
   if (!str) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
