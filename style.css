@@ -494,3 +494,22 @@ body {
   transition: color 0.15s, border-color 0.15s;
 }
 .btn-logout:hover { color: var(--red-fg); border-color: var(--red-fg); }
+
+/* PROFIT PREVIEW in lead modal */
+.profit-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.profit-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
